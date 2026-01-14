@@ -10,20 +10,34 @@ from collections import Counter
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
 # ==========================================
-# CSS: レイアウト調整
+# CSS: レイアウト調整 (ポップアップ最適化含む)
 # ==========================================
 st.markdown("""
 <style>
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 3rem !important;
-    }
-    /* ボタンのスタイル調整 */
-    .stButton button {
-        width: 100%;
+        padding-bottom: 5rem !important;
     }
     
-    /* ボード画像 (Flexbox) */
+    /* ボタン全般 */
+    .stButton button {
+        width: 100%;
+        border-radius: 4px;
+    }
+
+    /* --- ポップアップ(Dialog)内のボタン調整 --- */
+    /* ボタンの余白を削って横幅いっぱいに */
+    div[data-testid="stDialog"] button {
+        padding: 0.5rem 0rem !important;
+        margin: 0px !important;
+        line-height: 1.0 !important;
+    }
+    /* カラム間の隙間を調整 */
+    div[data-testid="stDialog"] [data-testid="stHorizontalBlock"] {
+        gap: 0.5rem !important;
+    }
+    
+    /* --- ボード画像 (Flexbox) --- */
     .board-container {
         display: flex;
         flex-direction: column;
@@ -31,28 +45,29 @@ st.markdown("""
         width: 100%;
     }
     .board-label {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         font-weight: bold;
         margin-bottom: 2px;
         text-align: center;
         width: 100%;
+        color: #555;
     }
     .board-cards-row {
         display: flex;
         justify-content: center;
-        gap: 4px;
+        gap: 3px;
         width: 100%;
-        min-height: 50px;
-        background-color: #f0f2f6; /* 空の時の背景 */
-        border-radius: 5px;
-        padding: 5px;
+        background-color: #f8f9fa;
+        border-radius: 6px;
+        padding: 6px 2px;
+        min-height: 40px;
     }
     .board-card-img {
         width: 30%;
-        max-width: 60px;
+        max-width: 55px;
         height: auto;
-        border-radius: 4px;
-        box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+        border-radius: 3px;
+        box-shadow: 0px 1px 3px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -190,20 +205,16 @@ def render_specific_hand_builder(player_key):
             st.rerun()
 
 # ==========================================
-# ポップアップ・ボードセレクター (核心部分)
+# ポップアップ・ボードセレクター
 # ==========================================
 @st.dialog("🃏 Select Board Cards")
 def edit_board_dialog():
-    st.caption("Select cards to add/remove. (Max 5 cards)")
-    
-    # スートをタブで切り替え（これでスマホでも縦長にならない！）
+    st.caption("Max 5 cards")
     tab_s, tab_h, tab_d, tab_c = st.tabs(["♠ Spades", "♥ Hearts", "♦ Diamonds", "♣ Clubs"])
-    
     ranks = list("AKQJT98765432")
     
-    # 共通のボタン描画関数
     def render_suit_grid(suit_code):
-        # 4列で表示
+        # 4列でボタンを配置 (スマホで見やすい)
         cols = st.columns(4)
         for i, r in enumerate(ranks):
             card_str = f"{r}{suit_code}"
@@ -214,11 +225,10 @@ def edit_board_dialog():
                 if c in curr: curr.remove(c)
                 else: 
                     if len(curr) < 5: curr.append(c)
-                st.rerun() # ダイアログ内を再描画
+                st.rerun()
                 
-            # 選択中は色を変える
             btn_type = "primary" if is_sel else "secondary"
-            # どの列に入れるか (i % 4)
+            # CSSでボタン幅100%にしているのでcols[i%4]の中で広がる
             cols[i % 4].button(f"{r}", key=f"d_btn_{card_str}", type=btn_type, on_click=toggle)
 
     with tab_s: render_suit_grid('s')
@@ -227,8 +237,7 @@ def edit_board_dialog():
     with tab_c: render_suit_grid('c')
     
     st.divider()
-    if st.button("Close & Apply", type="primary"):
-        st.rerun() # ダイアログを閉じてメイン画面更新
+    if st.button("Close", type="primary"): st.rerun()
 
 # ==========================================
 # Logic
@@ -283,45 +292,62 @@ def analyze_range_distribution(hero_range, villain_range, board, iterations=500)
 # ==========================================
 st.title("Poker Range Analyzer ♠")
 
-# Range
+# Range Section
 with st.container():
-    st.subheader("1. Range")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.caption("Hero")
-        tab1, tab2 = st.tabs(["%", "Card"])
+    st.subheader("1. Range Setup")
+    col_h, col_v = st.columns(2)
+    
+    # 軸ラベル定義 (グリッド表示修正用)
+    lbl = list("AKQJT98765432")
+
+    # Hero
+    with col_h:
+        st.markdown("**Hero Range**")
+        tab1, tab2 = st.tabs(["% Slider", "Specific Hand"])
         with tab1:
             def up_h(): st.session_state.hero_range_val = get_range_string_from_percent(*st.session_state.hs)
-            st.slider("Hero %", 0, 100, (0,10), key="hs", on_change=up_h)
+            st.slider("Select %", 0, 100, (0,10), key="hs", on_change=up_h)
         with tab2: render_specific_hand_builder("hero")
-        hero_in = st.text_area("H", key="hero_range_val", height=60, label_visibility="collapsed")
+        
+        # 入力欄のラベルを表示させる
+        hero_in = st.text_area("Hero Range Text", key="hero_range_val", height=70)
         h_combos = parse_range_notation(hero_in)
         if h_combos:
-            fig = px.imshow(create_range_grid_visual(h_combos), color_continuous_scale=["lightgrey", "blue"], zmin=0, zmax=1)
-            fig.update_xaxes(side="top", type='category'); fig.update_yaxes(autorange="reversed", type='category')
-            fig.update_layout(width=150, height=150, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
-            st.plotly_chart(fig, use_container_width=False)
-    with c2:
-        st.caption("Villain")
-        tab1, tab2 = st.tabs(["%", "Card"])
+            st.caption(f"{len(h_combos)} combos")
+            grid_h = create_range_grid_visual(h_combos)
+            # 修正: x, yにラベルを指定し、category型にする
+            fig_h = px.imshow(grid_h, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "blue"], zmin=0, zmax=1)
+            fig_h.update_xaxes(side="top", type='category'); fig_h.update_yaxes(autorange="reversed", type='category')
+            fig_h.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            st.plotly_chart(fig_h, use_container_width=False)
+
+    # Villain
+    with col_v:
+        st.markdown("**Villain Range**")
+        tab1, tab2 = st.tabs(["% Slider", "Specific Hand"])
         with tab1:
             def up_v(): st.session_state.villain_range_val = get_range_string_from_percent(*st.session_state.vs)
-            st.slider("Villain %", 0, 100, (0,15), key="vs", on_change=up_v)
+            st.slider("Select %", 0, 100, (0,15), key="vs", on_change=up_v)
         with tab2: render_specific_hand_builder("villain")
-        villain_in = st.text_area("V", key="villain_range_val", height=60, label_visibility="collapsed")
+        
+        villain_in = st.text_area("Villain Range Text", key="villain_range_val", height=70)
         v_combos = parse_range_notation(villain_in)
         if v_combos:
-            fig = px.imshow(create_range_grid_visual(v_combos), color_continuous_scale=["lightgrey", "red"], zmin=0, zmax=1)
-            fig.update_xaxes(side="top", type='category'); fig.update_yaxes(autorange="reversed", type='category')
-            fig.update_layout(width=150, height=150, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
-            st.plotly_chart(fig, use_container_width=False)
+            st.caption(f"{len(v_combos)} combos")
+            grid_v = create_range_grid_visual(v_combos)
+            # 修正: x, yにラベルを指定
+            fig_v = px.imshow(grid_v, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "red"], zmin=0, zmax=1)
+            fig_v.update_xaxes(side="top", type='category'); fig_v.update_yaxes(autorange="reversed", type='category')
+            fig_v.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            st.plotly_chart(fig_v, use_container_width=False)
 
-# Board (New Pop-up Style)
+# Board Section
 st.divider()
-st.subheader("2. Board")
+st.subheader("2. Board Setup")
 
-col_bd_btn, col_bd_view = st.columns([1, 3])
+col_bd_btn, col_bd_view = st.columns([1, 2])
 with col_bd_btn:
+    st.write("Action")
     if st.button("🃏 Edit Board", type="primary", use_container_width=True):
         edit_board_dialog()
     if st.button("Clear", use_container_width=True):
@@ -329,12 +355,13 @@ with col_bd_btn:
         st.rerun()
 
 with col_bd_view:
+    st.write("Current Board")
     try:
         board_objs = [str_to_card(s) for s in st.session_state['board_cards']]
         display_board_streets(board_objs)
     except: st.error("Error")
 
-# Analysis
+# Analysis Section
 st.divider()
 hero_range = parse_range_notation(hero_in)
 villain_range = parse_range_notation(villain_in)
@@ -350,21 +377,25 @@ if hero_range and villain_range:
         df = analyze_runouts(hero_range, villain_range, board_objs, iterations=sim_iterations)
         df['Loss'] = eq - df['Equity']
         bad = df[df['Loss'] > 0]
+        
         c1, c2, c3 = st.columns(3)
-        c1.metric("Risk", f"{bad['Loss'].sum():.1f}")
-        c2.metric("Scare", f"{len(bad[bad['Loss']>5])}")
-        c3.metric("Safe", f"{len(df)-len(bad)}")
+        with c1: st.metric("Risk", f"{bad['Loss'].sum():.1f}", help="Weighted Downside Risk")
+        with c2: st.metric("Scare", f"{len(bad[bad['Loss']>5])}", help="Cards dropping equity > 5%")
+        with c3: st.metric("Safe", f"{len(df)-len(bad)}", help="Safe cards")
 
+        # ヒートマップ修正: ラベル追加
         order = list("AKQJT98765432")
         piv = df.pivot_table(index="Rank", columns="Suit", values="Equity").reindex(order)[list("shdc")]
         fig = px.imshow(piv, x=['s♠','h♥','d♦','c♣'], y=order, color_continuous_scale="RdBu_r", zmin=0, zmax=100, text_auto=".0f")
-        fig.update_layout(width=300, height=500, margin=dict(l=0,r=0,t=0,b=0))
+        fig.update_yaxes(type='category', dtick=1)
+        fig.update_layout(width=300, height=500, margin=dict(l=0,r=0,t=30,b=0), title="Runout Heatmap")
         st.plotly_chart(fig, use_container_width=True)
         
+        st.subheader("4. Range Distribution")
         he, ve = analyze_range_distribution(hero_range, villain_range, board_objs, iterations=sim_iterations)
         hist = go.Figure()
         hist.add_trace(go.Histogram(x=he, name='Hero', marker_color='blue', opacity=0.7))
         hist.add_trace(go.Histogram(x=ve, name='Villain', marker_color='red', opacity=0.7))
-        hist.update_layout(barmode='overlay', width=300, height=300, margin=dict(l=0,r=0,t=0,b=0))
+        hist.update_layout(barmode='overlay', width=300, height=300, margin=dict(l=0,r=0,t=0,b=0), xaxis_title="Equity %")
         st.plotly_chart(hist, use_container_width=True)
     else: st.success("River Reached")
