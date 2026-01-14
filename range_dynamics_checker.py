@@ -10,78 +10,90 @@ from collections import Counter
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
 # ==========================================
-# 強制レイアウト修正 CSS (スマホ対応の核心)
+# CSS: 横スクロール完全排除 & 画面フィット
 # ==========================================
 st.markdown("""
 <style>
-    /* 全体の余白削減 */
+    /* アプリ全体の左右余白を最小化 */
     .block-container {
+        padding-left: 0.2rem !important;
+        padding-right: 0.2rem !important;
         padding-top: 1rem !important;
         padding-bottom: 2rem !important;
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
+        max-width: 100% !important;
     }
 
-    /* ---------------------------------------------------
-       スマホ(画面幅768px以下)でもカラムを絶対に縦積みにさせない設定
-       Streamlitのデフォルト動作(flex-direction: column)を上書き
-    --------------------------------------------------- */
-    @media (max-width: 768px) {
-        div[data-testid="stHorizontalBlock"] {
-            display: flex !important;
-            flex-direction: row !important; /* 横並び強制 */
-            flex-wrap: nowrap !important;   /* 折り返し禁止 */
-            overflow-x: auto !important;    /* はみ出たらスクロール */
-        }
-        
-        div[data-testid="column"] {
-            flex: 1 1 auto !important;
-            width: auto !important;
-            min-width: 10px !important; /* 極小サイズを許容 */
-        }
-        
-        /* ボタンの文字サイズとパディングを極限まで小さく */
-        div[data-testid="stHorizontalBlock"] button {
-            padding: 0px 2px !important;
-            font-size: 10px !important;
-            min-height: 30px !important;
-            height: 30px !important;
-        }
-        
-        /* スートアイコンの余白調整 */
-        h4 {
-            font-size: 16px !important;
-            margin: 0 !important;
-            padding-top: 5px !important;
-        }
+    /* --- カードピッカー周辺の強制フィット --- */
+    
+    /* 水平ブロックをフレックスボックス化して均等配置 */
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 1px !important; /* ボタン間の隙間を極小に */
+        width: 100% !important;
     }
 
-    /* PC/スマホ共通: ボタンの無駄な余白を消す */
+    /* 各カラム(ボタンの入れ物)の設定 */
     div[data-testid="column"] {
-        padding: 0 1px !important;
+        flex: 1 1 0px !important; /* 均等に伸縮 */
+        min-width: 0 !important;  /* 最小幅制限を解除 */
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* ボタン自体のスタイル */
+    div[data-testid="stHorizontalBlock"] button {
+        width: 100% !important;
+        min-width: 0px !important;
+        padding: 0px !important;
+        margin: 0px !important;
+        height: 2.4rem !important;
+        min-height: 2.4rem !important;
+        font-size: 0.8rem !important;
+        line-height: 1 !important;
+        border-radius: 2px !important; /* 角丸を小さくしてスペース節約 */
     }
     
-    /* ボード表示エリアのスタイル */
+    /* スマホ画面(幅狭)の時のフォントサイズ微調整 */
+    @media (max-width: 450px) {
+        div[data-testid="stHorizontalBlock"] button {
+            font-size: 10px !important; /* 文字を小さく */
+            height: 2.0rem !important;
+            min-height: 2.0rem !important;
+        }
+        h4 {
+            font-size: 1rem !important;
+        }
+    }
+
+    /* --- ボードカード画像のレスポンシブ化 --- */
     .board-container {
         display: flex;
+        flex-direction: column; /* ラベルと画像を縦積み */
         align-items: center;
-        margin-bottom: 10px;
+        width: 100%;
     }
     .board-label {
+        font-size: 0.7rem;
         font-weight: bold;
-        font-size: 12px;
-        width: 45px; /* ラベル幅固定 */
-        margin-right: 5px;
+        margin-bottom: 2px;
+        text-align: center;
+        width: 100%;
     }
     .board-cards-row {
         display: flex;
-        flex-direction: row;
-        gap: 3px;
+        justify-content: center;
+        gap: 2px;
+        width: 100%;
     }
     .board-card-img {
-        width: 45px; /* スマホで見やすい固定サイズ */
+        /* 画面幅に応じたサイズ指定 (vw) */
+        width: 28%; 
+        max-width: 50px; /* PCでは大きすぎないように */
+        height: auto;
         border-radius: 3px;
     }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -100,10 +112,8 @@ except: st.stop()
 # ==========================================
 with st.sidebar:
     st.header("🔧 Settings")
-    st.markdown("**Simulation Accuracy**")
-    sim_iterations = st.slider("Iterations per Hand", 100, 5000, 500, 100)
-    st.divider()
-    if st.button("Reset App", type="primary"):
+    sim_iterations = st.slider("Iterations", 100, 5000, 500, 100)
+    if st.button("Reset", type="primary"):
         for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
 
@@ -196,7 +206,7 @@ def create_range_grid_visual(combo_list):
         except: continue
     return grid_data
 
-# --- ボード表示 (HTMLでFlexbox強制) ---
+# HTML Board Display (Responsive)
 def display_board_streets(cards):
     if not cards:
         st.info("Preflop")
@@ -208,22 +218,21 @@ def display_board_streets(cards):
         url = f"https://deckofcardsapi.com/static/img/{r}{s}.png"
         return f'<img src="{url}" class="board-card-img">'
 
-    # FLOP/TURN/RIVERをすべてHTMLで描画
-    flop_html = ""
-    if len(cards) > 0:
-        imgs = "".join([get_html_img(c) for c in cards[:3]])
-        flop_html = f'<div class="board-container"><div class="board-label">FLOP</div><div class="board-cards-row">{imgs}</div></div>'
+    c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
     
-    turn_html = ""
-    if len(cards) >= 4:
-        turn_html = f'<div class="board-container"><div class="board-label">TURN</div><div class="board-cards-row">{get_html_img(cards[3])}</div></div>'
-        
-    river_html = ""
-    if len(cards) >= 5:
-        river_html = f'<div class="board-container"><div class="board-label">RIVER</div><div class="board-cards-row">{get_html_img(cards[4])}</div></div>'
-    
-    st.markdown(flop_html + turn_html + river_html, unsafe_allow_html=True)
-
+    with c_flop:
+        html = f'<div class="board-container"><div class="board-label">FLOP</div><div class="board-cards-row">{"".join([get_html_img(c) for c in cards[:3]])}</div></div>'
+        st.markdown(html, unsafe_allow_html=True)
+            
+    with c_turn:
+        if len(cards) >= 4:
+            html = f'<div class="board-container"><div class="board-label">TURN</div><div class="board-cards-row">{get_html_img(cards[3])}</div></div>'
+            st.markdown(html, unsafe_allow_html=True)
+            
+    with c_river:
+        if len(cards) >= 5:
+            html = f'<div class="board-container"><div class="board-label">RIVER</div><div class="board-cards-row">{get_html_img(cards[4])}</div></div>'
+            st.markdown(html, unsafe_allow_html=True)
 
 def render_specific_hand_builder(player_key):
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -244,7 +253,7 @@ def render_specific_hand_builder(player_key):
             st.rerun()
 
 # ==========================================
-# 計算ロジック
+# Logic
 # ==========================================
 def calculate_equity(hero_range, villain_range, board, iterations=1000, silent=False):
     h_wins = 0; ties = 0
@@ -301,7 +310,7 @@ def analyze_range_distribution(hero_range, villain_range, board, iterations=500)
 # ==========================================
 st.title("Poker Range Analyzer ♠")
 
-# --- Range Setup (Compact) ---
+# Range Setup
 with st.container():
     st.subheader("1. Range Setup")
     col_h, col_v = st.columns(2)
@@ -322,7 +331,7 @@ with st.container():
             lbl = list("AKQJT98765432")
             fig_h = px.imshow(grid_h, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "blue"], zmin=0, zmax=1)
             fig_h.update_xaxes(side="top", type='category'); fig_h.update_yaxes(autorange="reversed", type='category')
-            fig_h.update_layout(width=160, height=160, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            fig_h.update_layout(width=150, height=150, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_h, use_container_width=False)
     
     with col_v:
@@ -342,10 +351,10 @@ with st.container():
             lbl = list("AKQJT98765432")
             fig_v = px.imshow(grid_v, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "red"], zmin=0, zmax=1)
             fig_v.update_xaxes(side="top", type='category'); fig_v.update_yaxes(autorange="reversed", type='category')
-            fig_v.update_layout(width=160, height=160, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            fig_v.update_layout(width=150, height=150, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_v, use_container_width=False)
 
-# --- Board Setup (Fixed Layout) ---
+# Board Setup
 st.subheader("2. Board Setup")
 with st.expander("Card Picker", expanded=True):
     suits_data = [('s', '♠', 'grey'), ('h', '♥', 'red'), ('d', '♦', 'blue'), ('c', '♣', 'green')]
@@ -364,20 +373,16 @@ with st.expander("Card Picker", expanded=True):
         col.button(f"{rank}", key=f"btn_{card_str}_{unique_id}", type="primary" if is_sel else "secondary", on_click=toggle)
 
     for s_idx, (s_code, s_icon, s_color) in enumerate(suits_data):
-        # 1行目: アイコン + High Cards (7枚)
-        row1 = st.columns([1, 7])
-        with row1[0]: st.markdown(f"#### :{s_color}[{s_icon}]")
-        with row1[1]:
-            c_high = st.columns(7)
-            for i, r in enumerate(high_ranks):
-                create_card_button(c_high[i], r, s_code, f"h_{s_idx}_{i}")
+        # アイコン+High (1+7=8分割)
+        cols1 = st.columns([1] + [1]*7) 
+        with cols1[0]: st.markdown(f"#### :{s_color}[{s_icon}]")
+        for i, r in enumerate(high_ranks):
+            create_card_button(cols1[i+1], r, s_code, f"h_{s_idx}_{i}")
         
-        # 2行目: 空白 + Low Cards (6枚 -> 7カラム使って左寄せ)
-        row2 = st.columns([1, 7])
-        with row2[1]:
-            c_low = st.columns(7)
-            for i, r in enumerate(low_ranks):
-                create_card_button(c_low[i], r, s_code, f"l_{s_idx}_{i}")
+        # Low (1(空)+7=8分割) -> 左寄せ
+        cols2 = st.columns([1] + [1]*7)
+        for i, r in enumerate(low_ranks):
+            create_card_button(cols2[i+1], r, s_code, f"l_{s_idx}_{i}")
 
 st.divider()
 board_list_str = st.session_state['board_cards']
