@@ -9,18 +9,33 @@ from collections import Counter
 
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
-# --- CSSでのスマホ表示調整 ---
+# ==========================================
+# スマホレイアウト強制修正 CSS
+# ==========================================
 st.markdown("""
 <style>
-    /* ボタンのパディングを狭くしてスマホで並びやすくする */
-    div[data-testid="stHorizontalBlock"] button {
-        padding: 0rem 0.2rem !important;
-        min-height: 2.5rem;
-        font-size: 0.8rem;
+    /* スマホでもカラムを縦積みにしない強力な設定 */
+    div[data-testid="column"] {
+        width: auto !important;
+        flex: 1 1 auto !important;
+        min-width: 0px !important;
     }
-    /* カラムのギャップを詰める */
+    
+    /* ボタンの余白を極限まで削る */
     div[data-testid="stHorizontalBlock"] {
-        gap: 0.2rem !important;
+        gap: 0.1rem !important;
+    }
+    div[data-testid="stHorizontalBlock"] button {
+        padding: 0rem 0rem !important;
+        line-height: 1.2 !important;
+        min-height: 2rem !important;
+        font-size: 0.8rem !important;
+        width: 100% !important;
+    }
+    
+    /* 画像のキャプション等を消してスペース確保 */
+    div[data-testid="stImage"] {
+        min-width: 0px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,32 +151,37 @@ def create_range_grid_visual(combo_list):
         except: continue
     return grid_data
 
-# --- スマホ対応ボード表示 (画像サイズ固定) ---
+# --- ボード表示をHTML(Flexbox)に変更しスマホ対応 ---
 def display_board_streets(cards):
     if not cards:
         st.info("Preflop")
         return
-    c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
     
-    # 画像URL生成
-    def get_img_url(card_int):
+    # 画像URL生成ヘルパー
+    def get_html_img(card_int):
         c_str = card_to_str(card_int)
         r = c_str[0].upper().replace("T", "0"); s = c_str[1].upper()
-        return f"https://deckofcardsapi.com/static/img/{r}{s}.png"
-        
-    # width=70 でスマホでも巨大化させない
+        url = f"https://deckofcardsapi.com/static/img/{r}{s}.png"
+        # width: 18% により、親要素内で横並びを維持
+        return f'<img src="{url}" style="width:55px; margin-right:3px; border-radius:3px;">'
+
+    c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
+    
     with c_flop:
         st.markdown("**FLOP**")
         if len(cards) > 0:
-            cols = st.columns(3)
-            for i, card in enumerate(cards[:3]):
-                with cols[i]: st.image(get_img_url(card), width=70) 
+            imgs = "".join([get_html_img(c) for c in cards[:3]])
+            st.markdown(f'<div style="display:flex; flex-direction:row;">{imgs}</div>', unsafe_allow_html=True)
+            
     with c_turn:
         st.markdown("**TURN**")
-        if len(cards) >= 4: st.image(get_img_url(cards[3]), width=70)
+        if len(cards) >= 4:
+            st.markdown(f'<div style="display:flex;">{get_html_img(cards[3])}</div>', unsafe_allow_html=True)
+            
     with c_river:
         st.markdown("**RIVER**")
-        if len(cards) >= 5: st.image(get_img_url(cards[4]), width=70)
+        if len(cards) >= 5:
+            st.markdown(f'<div style="display:flex;">{get_html_img(cards[4])}</div>', unsafe_allow_html=True)
 
 def render_specific_hand_builder(player_key):
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -285,47 +305,42 @@ with st.container():
 
 st.subheader("2. Board Setup")
 with st.expander("Show Card Picker", expanded=True):
-    # 色定義
-    suits_data = [
-        ('s', '♠', 'grey'),
-        ('h', '♥', 'red'),
-        ('d', '♦', 'blue'),
-        ('c', '♣', 'green')
-    ]
+    suits_data = [('s', '♠', 'grey'), ('h', '♥', 'red'), ('d', '♦', 'blue'), ('c', '♣', 'green')]
     
-    # ランクを2行に分割してスマホ対応 (High: A-8, Low: 7-2)
+    # 2段に分ける (High / Low)
     high_ranks = list("AKQJT98")
     low_ranks = list("765432")
     
     for s_code, s_icon, s_color in suits_data:
-        # スートヘッダー
-        st.markdown(f"#### :{s_color}[{s_icon}]")
-        
-        # Row 1: High Cards (7 columns)
-        cols_h = st.columns(7)
-        for i, r in enumerate(high_ranks):
-            card_str = f"{r}{s_code}"
-            is_sel = card_str in st.session_state['board_cards']
-            def toggle(c=card_str):
-                curr = st.session_state['board_cards']
-                if c in curr: curr.remove(c)
-                else: 
-                    if len(curr) < 5: curr.append(c)
-                st.session_state['widget_id_counter'] += 1
-            cols_h[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
+        row_cols = st.columns([0.5, 12])
+        with row_cols[0]: st.markdown(f"## :{s_color}[{s_icon}]")
+        with row_cols[1]:
+            # Row 1: High
+            cols_h = st.columns(7)
+            for i, r in enumerate(high_ranks):
+                card_str = f"{r}{s_code}"
+                is_sel = card_str in st.session_state['board_cards']
+                def toggle(c=card_str):
+                    curr = st.session_state['board_cards']
+                    if c in curr: curr.remove(c)
+                    else: 
+                        if len(curr) < 5: curr.append(c)
+                    st.session_state['widget_id_counter'] += 1
+                cols_h[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
             
-        # Row 2: Low Cards (6 columns)
-        cols_l = st.columns(7) # Align with above
-        for i, r in enumerate(low_ranks):
-            card_str = f"{r}{s_code}"
-            is_sel = card_str in st.session_state['board_cards']
-            def toggle(c=card_str):
-                curr = st.session_state['board_cards']
-                if c in curr: curr.remove(c)
-                else: 
-                    if len(curr) < 5: curr.append(c)
-                st.session_state['widget_id_counter'] += 1
-            cols_l[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
+            # Row 2: Low
+            cols_l = st.columns(7)
+            for i, r in enumerate(low_ranks):
+                card_str = f"{r}{s_code}"
+                is_sel = card_str in st.session_state['board_cards']
+                def toggle(c=card_str):
+                    curr = st.session_state['board_cards']
+                    if c in curr: curr.remove(c)
+                    else: 
+                        if len(curr) < 5: curr.append(c)
+                    st.session_state['widget_id_counter'] += 1
+                if i < 6: # 7-2 is 6 items
+                    cols_l[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
 
 st.divider()
 board_list_str = st.session_state['board_cards']
@@ -333,6 +348,7 @@ col_vis, col_ctrl = st.columns([4, 1])
 with col_vis:
     try:
         board_objs = [str_to_card(s) for s in board_list_str] if board_list_str else []
+        # ここでHTML版の関数を呼び出す
         display_board_streets(board_objs)
     except: st.error("Board Error. Reset."); board_objs = []
 with col_ctrl:
