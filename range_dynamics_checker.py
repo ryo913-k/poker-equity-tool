@@ -10,90 +10,78 @@ from collections import Counter
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
 # ==========================================
-# CSS: 横スクロール完全排除 & 画面フィット
+# レイアウト修正 CSS (横スクロール許容・ボタンサイズ確保)
 # ==========================================
 st.markdown("""
 <style>
-    /* アプリ全体の左右余白を最小化 */
+    /* 全体の余白削減 */
     .block-container {
-        padding-left: 0.2rem !important;
-        padding-right: 0.2rem !important;
         padding-top: 1rem !important;
         padding-bottom: 2rem !important;
-        max-width: 100% !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
     }
 
-    /* --- カードピッカー周辺の強制フィット --- */
-    
-    /* 水平ブロックをフレックスボックス化して均等配置 */
-    div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        gap: 1px !important; /* ボタン間の隙間を極小に */
-        width: 100% !important;
-    }
-
-    /* 各カラム(ボタンの入れ物)の設定 */
-    div[data-testid="column"] {
-        flex: 1 1 0px !important; /* 均等に伸縮 */
-        min-width: 0 !important;  /* 最小幅制限を解除 */
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-
-    /* ボタン自体のスタイル */
-    div[data-testid="stHorizontalBlock"] button {
-        width: 100% !important;
-        min-width: 0px !important;
-        padding: 0px !important;
-        margin: 0px !important;
-        height: 2.4rem !important;
-        min-height: 2.4rem !important;
-        font-size: 0.8rem !important;
-        line-height: 1 !important;
-        border-radius: 2px !important; /* 角丸を小さくしてスペース節約 */
-    }
-    
-    /* スマホ画面(幅狭)の時のフォントサイズ微調整 */
-    @media (max-width: 450px) {
+    /* ---------------------------------------------------
+       スマホ(画面幅768px以下)での設定
+       ボタンを無理に縮めず、横スクロールで表示する
+    --------------------------------------------------- */
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important; /* 横並び強制 */
+            flex-wrap: nowrap !important;   /* 折り返し禁止 */
+            overflow-x: auto !important;    /* はみ出たらスクロール */
+        }
+        
+        div[data-testid="column"] {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 35px !important; /* ボタンの最小幅を確保 */
+        }
+        
+        /* ボタンサイズを確保 */
         div[data-testid="stHorizontalBlock"] button {
-            font-size: 10px !important; /* 文字を小さく */
-            height: 2.0rem !important;
-            min-height: 2.0rem !important;
+            padding: 0px 2px !important;
+            font-size: 12px !important;
+            min-height: 35px !important;
+            height: 35px !important;
         }
+        
+        /* スートアイコン */
         h4 {
-            font-size: 1rem !important;
+            font-size: 16px !important;
+            margin: 0 !important;
+            padding-top: 8px !important;
         }
     }
 
-    /* --- ボードカード画像のレスポンシブ化 --- */
+    /* PC/スマホ共通 */
+    div[data-testid="column"] {
+        padding: 0 1px !important;
+    }
+    
+    /* ボード表示エリア */
     .board-container {
         display: flex;
-        flex-direction: column; /* ラベルと画像を縦積み */
         align-items: center;
-        width: 100%;
+        margin-bottom: 10px;
     }
     .board-label {
-        font-size: 0.7rem;
         font-weight: bold;
-        margin-bottom: 2px;
-        text-align: center;
-        width: 100%;
+        font-size: 12px;
+        width: 45px; 
+        margin-right: 5px;
     }
     .board-cards-row {
         display: flex;
-        justify-content: center;
-        gap: 2px;
-        width: 100%;
+        flex-direction: row;
+        gap: 3px;
     }
     .board-card-img {
-        /* 画面幅に応じたサイズ指定 (vw) */
-        width: 28%; 
-        max-width: 50px; /* PCでは大きすぎないように */
-        height: auto;
+        width: 45px;
         border-radius: 3px;
     }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -112,8 +100,10 @@ except: st.stop()
 # ==========================================
 with st.sidebar:
     st.header("🔧 Settings")
-    sim_iterations = st.slider("Iterations", 100, 5000, 500, 100)
-    if st.button("Reset", type="primary"):
+    st.markdown("**Simulation Accuracy**")
+    sim_iterations = st.slider("Iterations per Hand", 100, 5000, 500, 100)
+    st.divider()
+    if st.button("Reset App", type="primary"):
         for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
 
@@ -206,7 +196,7 @@ def create_range_grid_visual(combo_list):
         except: continue
     return grid_data
 
-# HTML Board Display (Responsive)
+# HTML Board Display
 def display_board_streets(cards):
     if not cards:
         st.info("Preflop")
