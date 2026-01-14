@@ -10,33 +10,64 @@ from collections import Counter
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
 # ==========================================
-# スマホレイアウト強制修正 CSS
+# スマホレイアウト最適化 CSS
 # ==========================================
 st.markdown("""
 <style>
-    /* スマホでもカラムを縦積みにしない強力な設定 */
-    div[data-testid="column"] {
-        width: auto !important;
-        flex: 1 1 auto !important;
-        min-width: 0px !important;
+    /* 全体の余白を少し詰める */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 3rem !important;
     }
     
-    /* ボタンの余白を極限まで削る */
-    div[data-testid="stHorizontalBlock"] {
+    /* --- カードピッカー周りの調整 --- */
+    /* カラム間の隙間を極小に */
+    [data-testid="stHorizontalBlock"] {
         gap: 0.1rem !important;
     }
-    div[data-testid="stHorizontalBlock"] button {
-        padding: 0rem 0rem !important;
-        line-height: 1.2 !important;
-        min-height: 2rem !important;
-        font-size: 0.8rem !important;
+    /* ボタンのスタイルをコンパクトに */
+    .stButton button {
+        padding: 0rem !important;
+        line-height: 2.2rem !important; /* 高さ確保と文字の垂直中央揃え */
+        min-height: 2.2rem !important;
+        font-size: 0.9rem !important;
         width: 100% !important;
+        margin: 0px !important;
     }
-    
-    /* 画像のキャプション等を消してスペース確保 */
-    div[data-testid="stImage"] {
-        min-width: 0px !important;
+    /* スートアイコンの余白調整 */
+    h3 {
+        margin-top: 0.2rem !important;
+        margin-bottom: 0rem !important;
+        padding: 0 !important;
     }
+    /* 各スートのブロック間の隙間を詰める */
+    .suit-block {
+        margin-bottom: 0.3rem !important;
+    }
+
+    /* --- ボード表示部の調整（重なり防止） --- */
+    /* ラベルのスタイル */
+    .board-street-label {
+        margin-bottom: 0.3rem !important; /* 画像との間に余白を確保 */
+        font-weight: bold;
+        font-size: 0.9rem;
+    }
+    /* カード画像を横並びにするコンテナ */
+    .board-card-container {
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start; /* 上揃えで重なりを防ぐ */
+    }
+    /* カード画像自体のスタイル */
+    .board-card-img {
+        width: 29%;          /* FLOPで3枚並んでも収まる幅 */
+        max-width: 65px;     /* PCで巨大化しないための上限 */
+        height: auto;
+        margin-right: 2%;    /* カード間の隙間 */
+        border-radius: 4px;
+        vertical-align: top; /* テキストとの位置関係を調整 */
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -151,37 +182,37 @@ def create_range_grid_visual(combo_list):
         except: continue
     return grid_data
 
-# --- ボード表示をHTML(Flexbox)に変更しスマホ対応 ---
+# --- ボード表示をHTML(Flexbox)で調整し重なりを回避 ---
 def display_board_streets(cards):
     if not cards:
         st.info("Preflop")
         return
     
-    # 画像URL生成ヘルパー
+    # 画像HTML生成ヘルパー (CSSクラス適用)
     def get_html_img(card_int):
         c_str = card_to_str(card_int)
         r = c_str[0].upper().replace("T", "0"); s = c_str[1].upper()
         url = f"https://deckofcardsapi.com/static/img/{r}{s}.png"
-        # width: 18% により、親要素内で横並びを維持
-        return f'<img src="{url}" style="width:55px; margin-right:3px; border-radius:3px;">'
+        return f'<img src="{url}" class="board-card-img">'
 
     c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
     
     with c_flop:
-        st.markdown("**FLOP**")
+        st.markdown('<p class="board-street-label">FLOP</p>', unsafe_allow_html=True)
         if len(cards) > 0:
             imgs = "".join([get_html_img(c) for c in cards[:3]])
-            st.markdown(f'<div style="display:flex; flex-direction:row;">{imgs}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="board-card-container">{imgs}</div>', unsafe_allow_html=True)
             
     with c_turn:
-        st.markdown("**TURN**")
+        st.markdown('<p class="board-street-label">TURN</p>', unsafe_allow_html=True)
         if len(cards) >= 4:
-            st.markdown(f'<div style="display:flex;">{get_html_img(cards[3])}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="board-card-container">{get_html_img(cards[3])}</div>', unsafe_allow_html=True)
             
     with c_river:
-        st.markdown("**RIVER**")
+        st.markdown('<p class="board-street-label">RIVER</p>', unsafe_allow_html=True)
         if len(cards) >= 5:
-            st.markdown(f'<div style="display:flex;">{get_html_img(cards[4])}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="board-card-container">{get_html_img(cards[4])}</div>', unsafe_allow_html=True)
+
 
 def render_specific_hand_builder(player_key):
     col1, col2, col3 = st.columns([1, 1, 1])
@@ -306,41 +337,39 @@ with st.container():
 st.subheader("2. Board Setup")
 with st.expander("Show Card Picker", expanded=True):
     suits_data = [('s', '♠', 'grey'), ('h', '♥', 'red'), ('d', '♦', 'blue'), ('c', '♣', 'green')]
-    
-    # 2段に分ける (High / Low)
     high_ranks = list("AKQJT98")
     low_ranks = list("765432")
     
-    for s_code, s_icon, s_color in suits_data:
-        row_cols = st.columns([0.5, 12])
-        with row_cols[0]: st.markdown(f"## :{s_color}[{s_icon}]")
+    # カード選択ボタン生成ヘルパー
+    def create_card_button(col, rank, suit_code, unique_id):
+        card_str = f"{rank}{suit_code}"
+        is_sel = card_str in st.session_state['board_cards']
+        def toggle(c=card_str):
+            curr = st.session_state['board_cards']
+            if c in curr: curr.remove(c)
+            else: 
+                if len(curr) < 5: curr.append(c)
+            st.session_state['widget_id_counter'] += 1
+        # キーを一意にする
+        btn_key = f"btn_{card_str}_{unique_id}"
+        col.button(f"{rank}", key=btn_key, type="primary" if is_sel else "secondary", on_click=toggle)
+
+    # スートごとのループ（余白を詰めるコンテナクラスを適用）
+    for s_idx, (s_code, s_icon, s_color) in enumerate(suits_data):
+        st.markdown(f'<div class="suit-block">', unsafe_allow_html=True)
+        row_cols = st.columns([0.8, 12])
+        with row_cols[0]:
+            st.markdown(f"### :{s_color}[{s_icon}]")
         with row_cols[1]:
             # Row 1: High
             cols_h = st.columns(7)
             for i, r in enumerate(high_ranks):
-                card_str = f"{r}{s_code}"
-                is_sel = card_str in st.session_state['board_cards']
-                def toggle(c=card_str):
-                    curr = st.session_state['board_cards']
-                    if c in curr: curr.remove(c)
-                    else: 
-                        if len(curr) < 5: curr.append(c)
-                    st.session_state['widget_id_counter'] += 1
-                cols_h[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
-            
+                create_card_button(cols_h[i], r, s_code, f"h_{s_idx}_{i}")
             # Row 2: Low
             cols_l = st.columns(7)
             for i, r in enumerate(low_ranks):
-                card_str = f"{r}{s_code}"
-                is_sel = card_str in st.session_state['board_cards']
-                def toggle(c=card_str):
-                    curr = st.session_state['board_cards']
-                    if c in curr: curr.remove(c)
-                    else: 
-                        if len(curr) < 5: curr.append(c)
-                    st.session_state['widget_id_counter'] += 1
-                if i < 6: # 7-2 is 6 items
-                    cols_l[i].button(f"{r}", key=f"btn_{card_str}", type="primary" if is_sel else "secondary", on_click=toggle)
+                create_card_button(cols_l[i], r, s_code, f"l_{s_idx}_{i}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 board_list_str = st.session_state['board_cards']
@@ -348,7 +377,6 @@ col_vis, col_ctrl = st.columns([4, 1])
 with col_vis:
     try:
         board_objs = [str_to_card(s) for s in board_list_str] if board_list_str else []
-        # ここでHTML版の関数を呼び出す
         display_board_streets(board_objs)
     except: st.error("Board Error. Reset."); board_objs = []
 with col_ctrl:
