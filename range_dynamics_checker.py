@@ -10,64 +10,78 @@ from collections import Counter
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
 # ==========================================
-# スマホレイアウト最適化 CSS
+# 強制レイアウト修正 CSS (スマホ対応の核心)
 # ==========================================
 st.markdown("""
 <style>
-    /* 全体の余白を少し詰める */
+    /* 全体の余白削減 */
     .block-container {
-        padding-top: 2rem !important;
-        padding-bottom: 3rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+
+    /* ---------------------------------------------------
+       スマホ(画面幅768px以下)でもカラムを絶対に縦積みにさせない設定
+       Streamlitのデフォルト動作(flex-direction: column)を上書き
+    --------------------------------------------------- */
+    @media (max-width: 768px) {
+        div[data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important; /* 横並び強制 */
+            flex-wrap: nowrap !important;   /* 折り返し禁止 */
+            overflow-x: auto !important;    /* はみ出たらスクロール */
+        }
+        
+        div[data-testid="column"] {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 10px !important; /* 極小サイズを許容 */
+        }
+        
+        /* ボタンの文字サイズとパディングを極限まで小さく */
+        div[data-testid="stHorizontalBlock"] button {
+            padding: 0px 2px !important;
+            font-size: 10px !important;
+            min-height: 30px !important;
+            height: 30px !important;
+        }
+        
+        /* スートアイコンの余白調整 */
+        h4 {
+            font-size: 16px !important;
+            margin: 0 !important;
+            padding-top: 5px !important;
+        }
+    }
+
+    /* PC/スマホ共通: ボタンの無駄な余白を消す */
+    div[data-testid="column"] {
+        padding: 0 1px !important;
     }
     
-    /* --- カードピッカー周りの調整 --- */
-    /* カラム間の隙間を極小に */
-    [data-testid="stHorizontalBlock"] {
-        gap: 0.1rem !important;
+    /* ボード表示エリアのスタイル */
+    .board-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
     }
-    /* ボタンのスタイルをコンパクトに */
-    .stButton button {
-        padding: 0rem !important;
-        line-height: 2.2rem !important; /* 高さ確保と文字の垂直中央揃え */
-        min-height: 2.2rem !important;
-        font-size: 0.9rem !important;
-        width: 100% !important;
-        margin: 0px !important;
-    }
-    /* スートアイコンの余白調整 */
-    h3 {
-        margin-top: 0.2rem !important;
-        margin-bottom: 0rem !important;
-        padding: 0 !important;
-    }
-    /* 各スートのブロック間の隙間を詰める */
-    .suit-block {
-        margin-bottom: 0.3rem !important;
-    }
-
-    /* --- ボード表示部の調整（重なり防止） --- */
-    /* ラベルのスタイル */
-    .board-street-label {
-        margin-bottom: 0.3rem !important; /* 画像との間に余白を確保 */
+    .board-label {
         font-weight: bold;
-        font-size: 0.9rem;
+        font-size: 12px;
+        width: 45px; /* ラベル幅固定 */
+        margin-right: 5px;
     }
-    /* カード画像を横並びにするコンテナ */
-    .board-card-container {
+    .board-cards-row {
         display: flex;
         flex-direction: row;
-        align-items: flex-start; /* 上揃えで重なりを防ぐ */
+        gap: 3px;
     }
-    /* カード画像自体のスタイル */
     .board-card-img {
-        width: 29%;          /* FLOPで3枚並んでも収まる幅 */
-        max-width: 65px;     /* PCで巨大化しないための上限 */
-        height: auto;
-        margin-right: 2%;    /* カード間の隙間 */
-        border-radius: 4px;
-        vertical-align: top; /* テキストとの位置関係を調整 */
+        width: 45px; /* スマホで見やすい固定サイズ */
+        border-radius: 3px;
     }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -77,7 +91,7 @@ def load_evaluator():
     return Evaluator()
 
 try:
-    with st.spinner('Loading poker engine...'):
+    with st.spinner('Loading engine...'):
         evaluator = load_evaluator()
 except: st.stop()
 
@@ -182,36 +196,33 @@ def create_range_grid_visual(combo_list):
         except: continue
     return grid_data
 
-# --- ボード表示をHTML(Flexbox)で調整し重なりを回避 ---
+# --- ボード表示 (HTMLでFlexbox強制) ---
 def display_board_streets(cards):
     if not cards:
         st.info("Preflop")
         return
     
-    # 画像HTML生成ヘルパー (CSSクラス適用)
     def get_html_img(card_int):
         c_str = card_to_str(card_int)
         r = c_str[0].upper().replace("T", "0"); s = c_str[1].upper()
         url = f"https://deckofcardsapi.com/static/img/{r}{s}.png"
         return f'<img src="{url}" class="board-card-img">'
 
-    c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
+    # FLOP/TURN/RIVERをすべてHTMLで描画
+    flop_html = ""
+    if len(cards) > 0:
+        imgs = "".join([get_html_img(c) for c in cards[:3]])
+        flop_html = f'<div class="board-container"><div class="board-label">FLOP</div><div class="board-cards-row">{imgs}</div></div>'
     
-    with c_flop:
-        st.markdown('<p class="board-street-label">FLOP</p>', unsafe_allow_html=True)
-        if len(cards) > 0:
-            imgs = "".join([get_html_img(c) for c in cards[:3]])
-            st.markdown(f'<div class="board-card-container">{imgs}</div>', unsafe_allow_html=True)
-            
-    with c_turn:
-        st.markdown('<p class="board-street-label">TURN</p>', unsafe_allow_html=True)
-        if len(cards) >= 4:
-            st.markdown(f'<div class="board-card-container">{get_html_img(cards[3])}</div>', unsafe_allow_html=True)
-            
-    with c_river:
-        st.markdown('<p class="board-street-label">RIVER</p>', unsafe_allow_html=True)
-        if len(cards) >= 5:
-            st.markdown(f'<div class="board-card-container">{get_html_img(cards[4])}</div>', unsafe_allow_html=True)
+    turn_html = ""
+    if len(cards) >= 4:
+        turn_html = f'<div class="board-container"><div class="board-label">TURN</div><div class="board-cards-row">{get_html_img(cards[3])}</div></div>'
+        
+    river_html = ""
+    if len(cards) >= 5:
+        river_html = f'<div class="board-container"><div class="board-label">RIVER</div><div class="board-cards-row">{get_html_img(cards[4])}</div></div>'
+    
+    st.markdown(flop_html + turn_html + river_html, unsafe_allow_html=True)
 
 
 def render_specific_hand_builder(player_key):
@@ -288,59 +299,59 @@ def analyze_range_distribution(hero_range, villain_range, board, iterations=500)
 # ==========================================
 # UI
 # ==========================================
-st.title("Poker Range Analyzer ♠ (Treys Edition)")
+st.title("Poker Range Analyzer ♠")
 
+# --- Range Setup (Compact) ---
 with st.container():
     st.subheader("1. Range Setup")
     col_h, col_v = st.columns(2)
     with col_h:
-        st.markdown("**Hero Range**")
-        tab_h1, tab_h2 = st.tabs(["📊 Macro (%)", "🃏 Specific"])
+        st.markdown("**Hero**")
+        tab_h1, tab_h2 = st.tabs(["% Range", "Hand"])
         with tab_h1:
             def update_hero():
                 s, e = st.session_state.hero_slider
                 st.session_state.hero_range_val = get_range_string_from_percent(s, e)
-            st.slider("Range %", 0, 100, (0, 10), key="hero_slider", on_change=update_hero)
+            st.slider("Hero %", 0, 100, (0, 10), key="hero_slider", on_change=update_hero)
         with tab_h2: render_specific_hand_builder("hero")
-        hero_input = st.text_area("Hero Input", key="hero_range_val", height=70)
+        hero_input = st.text_area("Hero Input", key="hero_range_val", height=60)
         h_combos = parse_range_notation(hero_input)
         if h_combos:
             st.caption(f"{len(h_combos)} combos")
             grid_h = create_range_grid_visual(h_combos)
             lbl = list("AKQJT98765432")
             fig_h = px.imshow(grid_h, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "blue"], zmin=0, zmax=1)
-            fig_h.update_xaxes(side="top", type='category')
-            fig_h.update_yaxes(autorange="reversed", type='category')
-            fig_h.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            fig_h.update_xaxes(side="top", type='category'); fig_h.update_yaxes(autorange="reversed", type='category')
+            fig_h.update_layout(width=160, height=160, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_h, use_container_width=False)
+    
     with col_v:
-        st.markdown("**Villain Range**")
-        tab_v1, tab_v2 = st.tabs(["📊 Macro (%)", "🃏 Specific"])
+        st.markdown("**Villain**")
+        tab_v1, tab_v2 = st.tabs(["% Range", "Hand"])
         with tab_v1:
             def update_villain():
                 s, e = st.session_state.villain_slider
                 st.session_state.villain_range_val = get_range_string_from_percent(s, e)
-            st.slider("Range %", 0, 100, (0, 15), key="villain_slider", on_change=update_villain)
+            st.slider("Villain %", 0, 100, (0, 15), key="villain_slider", on_change=update_villain)
         with tab_v2: render_specific_hand_builder("villain")
-        villain_input = st.text_area("Villain Input", key="villain_range_val", height=70)
+        villain_input = st.text_area("Villain Input", key="villain_range_val", height=60)
         v_combos = parse_range_notation(villain_input)
         if v_combos:
             st.caption(f"{len(v_combos)} combos")
             grid_v = create_range_grid_visual(v_combos)
             lbl = list("AKQJT98765432")
             fig_v = px.imshow(grid_v, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "red"], zmin=0, zmax=1)
-            fig_v.update_xaxes(side="top", type='category')
-            fig_v.update_yaxes(autorange="reversed", type='category')
-            fig_v.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
+            fig_v.update_xaxes(side="top", type='category'); fig_v.update_yaxes(autorange="reversed", type='category')
+            fig_v.update_layout(width=160, height=160, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_v, use_container_width=False)
 
+# --- Board Setup (Fixed Layout) ---
 st.subheader("2. Board Setup")
-with st.expander("Show Card Picker", expanded=True):
+with st.expander("Card Picker", expanded=True):
     suits_data = [('s', '♠', 'grey'), ('h', '♥', 'red'), ('d', '♦', 'blue'), ('c', '♣', 'green')]
     high_ranks = list("AKQJT98")
     low_ranks = list("765432")
     
-    # カード選択ボタン生成ヘルパー
     def create_card_button(col, rank, suit_code, unique_id):
         card_str = f"{rank}{suit_code}"
         is_sel = card_str in st.session_state['board_cards']
@@ -350,26 +361,23 @@ with st.expander("Show Card Picker", expanded=True):
             else: 
                 if len(curr) < 5: curr.append(c)
             st.session_state['widget_id_counter'] += 1
-        # キーを一意にする
-        btn_key = f"btn_{card_str}_{unique_id}"
-        col.button(f"{rank}", key=btn_key, type="primary" if is_sel else "secondary", on_click=toggle)
+        col.button(f"{rank}", key=f"btn_{card_str}_{unique_id}", type="primary" if is_sel else "secondary", on_click=toggle)
 
-    # スートごとのループ（余白を詰めるコンテナクラスを適用）
     for s_idx, (s_code, s_icon, s_color) in enumerate(suits_data):
-        st.markdown(f'<div class="suit-block">', unsafe_allow_html=True)
-        row_cols = st.columns([0.8, 12])
-        with row_cols[0]:
-            st.markdown(f"### :{s_color}[{s_icon}]")
-        with row_cols[1]:
-            # Row 1: High
-            cols_h = st.columns(7)
+        # 1行目: アイコン + High Cards (7枚)
+        row1 = st.columns([1, 7])
+        with row1[0]: st.markdown(f"#### :{s_color}[{s_icon}]")
+        with row1[1]:
+            c_high = st.columns(7)
             for i, r in enumerate(high_ranks):
-                create_card_button(cols_h[i], r, s_code, f"h_{s_idx}_{i}")
-            # Row 2: Low
-            cols_l = st.columns(7)
+                create_card_button(c_high[i], r, s_code, f"h_{s_idx}_{i}")
+        
+        # 2行目: 空白 + Low Cards (6枚 -> 7カラム使って左寄せ)
+        row2 = st.columns([1, 7])
+        with row2[1]:
+            c_low = st.columns(7)
             for i, r in enumerate(low_ranks):
-                create_card_button(cols_l[i], r, s_code, f"l_{s_idx}_{i}")
-        st.markdown('</div>', unsafe_allow_html=True)
+                create_card_button(c_low[i], r, s_code, f"l_{s_idx}_{i}")
 
 st.divider()
 board_list_str = st.session_state['board_cards']
@@ -393,12 +401,7 @@ if hero_range and villain_range:
     with c2: st.progress(eq/100)
     
     st.divider()
-    st.subheader("3. Dynamic Board Analysis (Next Card)")
-    with st.expander("ℹ️ How to read (解説)", expanded=False):
-        st.markdown("""
-        * **Weighted Downside Risk:** Sum of equity loss across bad cards.
-        * **Scare Cards:** Cards that drop equity by >5%.
-        """)
+    st.subheader("3. Dynamic Board Analysis")
     if len(board_objs) < 5:
         df = analyze_runouts(hero_range, villain_range, board_objs, iterations=sim_iterations)
         df['Loss'] = eq - df['Equity']
@@ -408,15 +411,15 @@ if hero_range and villain_range:
         safe_count = len(df) - len(bad_cards)
         
         col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1: st.metric("Weighted Downside Risk", f"{weighted_risk:.1f}")
-        with col_m2: st.metric("Scare Cards (>5% Drop)", f"{scare_cards_count}")
-        with col_m3: st.metric("Safe/Good Cards", f"{safe_count}")
+        with col_m1: st.metric("Risk", f"{weighted_risk:.1f}", help="Weighted Downside Risk")
+        with col_m2: st.metric("Scare Cards", f"{scare_cards_count}", help=">5% Drop")
+        with col_m3: st.metric("Safe Cards", f"{safe_count}")
 
         order = list("AKQJT98765432")
         piv = df.pivot_table(index="Rank", columns="Suit", values="Equity").reindex(order)[list("shdc")]
         fig = px.imshow(piv, x=['s♠','h♥','d♦','c♣'], y=order, color_continuous_scale="RdBu_r", zmin=0, zmax=100, text_auto=".0f")
         fig.update_yaxes(type='category', dtick=1)
-        fig.update_layout(width=400, height=600, title="Next Card Heatmap")
+        fig.update_layout(width=300, height=500, title="Next Card Heatmap", margin=dict(l=0,r=0,t=30,b=0))
         
         sel = st.plotly_chart(fig, on_select="rerun", key=f"hm_{len(board_objs)}", selection_mode="points")
         if sel and len(sel["selection"]["points"])>0:
@@ -434,6 +437,6 @@ if hero_range and villain_range:
             hist = go.Figure()
             hist.add_trace(go.Histogram(x=he, name='Hero', marker_color='blue', opacity=0.7, xbins=dict(start=0,end=100,size=5)))
             hist.add_trace(go.Histogram(x=ve, name='Villain', marker_color='red', opacity=0.7, xbins=dict(start=0,end=100,size=5)))
-            hist.update_layout(barmode='overlay', width=800, height=400, xaxis_title="Equity %")
-            st.plotly_chart(hist)
+            hist.update_layout(barmode='overlay', width=300, height=300, xaxis_title="Equity %", margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(hist, use_container_width=True)
     else: st.success("River Reached")
