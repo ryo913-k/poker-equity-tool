@@ -1,0 +1,4 @@
+streamlit
+eval7
+pandas
+plotly
