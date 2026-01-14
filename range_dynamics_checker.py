@@ -9,20 +9,15 @@ from collections import Counter
 
 st.set_page_config(page_title="Poker Equity Tool", layout="wide")
 
-# ==========================================
-# 高速化: Evaluatorをキャッシュする
-# ==========================================
+# Treysの評価機 (キャッシュして高速化)
 @st.cache_resource
 def load_evaluator():
     return Evaluator()
 
-# アプリ起動時に一度だけ読み込む（白画面回避）
 try:
-    with st.spinner('Loading poker engine... (This may take a moment)'):
+    with st.spinner('Loading poker engine...'):
         evaluator = load_evaluator()
-except Exception as e:
-    st.error(f"Error loading evaluator: {e}")
-    st.stop()
+except: st.stop()
 
 # ==========================================
 # 0. 設定 & データ管理
@@ -30,26 +25,19 @@ except Exception as e:
 with st.sidebar:
     st.header("🔧 Settings")
     st.markdown("**Simulation Accuracy**")
-    sim_iterations = st.slider(
-        "Iterations per Hand", 
-        min_value=100, max_value=5000, value=500, step=100,
-        help="Higher values = more precision but slower."
-    )
+    sim_iterations = st.slider("Iterations per Hand", 100, 5000, 500, 100)
     st.divider()
-    if st.button("Reset App (Clear All)", type="primary"):
-        for key in st.session_state.keys():
-            del st.session_state[key]
+    if st.button("Reset App", type="primary"):
+        for key in st.session_state.keys(): del st.session_state[key]
         st.rerun()
 
-if 'board_cards' not in st.session_state:
-    st.session_state['board_cards'] = ["Th", "8d", "2c"]
-if 'widget_id_counter' not in st.session_state:
-    st.session_state['widget_id_counter'] = 0
+if 'board_cards' not in st.session_state: st.session_state['board_cards'] = ["Th", "8d", "2c"]
+if 'widget_id_counter' not in st.session_state: st.session_state['widget_id_counter'] = 0
 if 'hero_range_val' not in st.session_state: st.session_state.hero_range_val = "QQ+, AKs, AKo"
 if 'villain_range_val' not in st.session_state: st.session_state.villain_range_val = "TT+, AJs+, KQs, AQo+"
 
 # ==========================================
-# ユーティリティ & 定義
+# ユーティリティ
 # ==========================================
 HAND_ORDER = [
     "AA", "KK", "QQ", "AKs", "JJ", "AKo", "AQs", "TT", "AJs", "KQs", "99", "ATs", "AQo", "KJs", "88", "QJs", "JTs", 
@@ -69,15 +57,11 @@ HAND_ORDER = [
 
 def get_range_string_from_percent(start_p, end_p):
     if start_p >= end_p: return ""
-    total = 169
-    s_idx = int(total * (start_p / 100))
-    e_idx = int(total * (end_p / 100))
+    total = 169; s_idx = int(total*(start_p/100)); e_idx = int(total*(end_p/100))
     sel = HAND_ORDER[s_idx:e_idx]
     return ", ".join(sel) if sel else ""
 
-def card_to_str(card_int):
-    return Card.int_to_str(card_int)
-
+def card_to_str(card_int): return Card.int_to_str(card_int)
 def str_to_card(card_str):
     clean = card_str.replace("10", "T").replace("0", "T")
     try: return Card.new(clean)
@@ -97,16 +81,14 @@ def parse_range_notation(range_str):
                 continue
             except: pass
         try:
-            r1=part[0]; r2=part[1]
-            r1i=ranks.find(r1); r2i=ranks.find(r2)
+            r1=part[0]; r2=part[1]; r1i=ranks.find(r1); r2i=ranks.find(r2)
             if r1i==-1 or r2i==-1: continue
             is_plus='+' in part; is_s='s' in part; is_o='o' in part
             if r1i == r2i:
                 top = 12 if is_plus else r1i
                 for r in range(r1i, top+1):
                     for i in range(4):
-                        for j in range(i+1, 4): 
-                            combos.append([str_to_card(ranks[r]+suits[i]), str_to_card(ranks[r]+suits[j])])
+                        for j in range(i+1, 4): combos.append([str_to_card(ranks[r]+suits[i]), str_to_card(ranks[r]+suits[j])])
             else:
                 if r1i < r2i: r1i, r2i, r1, r2 = r2i, r1i, r2, r1
                 top_k = r1i - 1 if is_plus else r2i
@@ -140,7 +122,7 @@ def create_range_grid_visual(combo_list):
 
 def display_board_streets(cards):
     if not cards:
-        st.info("No cards selected (Preflop)")
+        st.info("Preflop")
         return
     c_flop, c_turn, c_river = st.columns([3, 1.2, 1.2])
     def get_img_url(card_int):
@@ -171,8 +153,7 @@ def render_specific_hand_builder(player_key):
         r2 = st.selectbox("Rank", ranks_ui, key=f"{player_key}_r2")
         s2 = next(x[1] for x in suits_ui if x[0] == st.selectbox("Suit", [x[0] for x in suits_ui], key=f"{player_key}_s2"))
     with col3:
-        st.write("")
-        st.write("")
+        st.write(""); st.write("")
         if st.button("Add", key=f"{player_key}_add"):
             hand_str = f"{r1}{s1}{r2}{s2}"
             current = st.session_state.get(f"{player_key}_range_val", "")
@@ -256,7 +237,12 @@ with st.container():
             grid_h = create_range_grid_visual(h_combos)
             lbl = list("AKQJT98765432")
             fig_h = px.imshow(grid_h, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "blue"], zmin=0, zmax=1)
-            fig_h.update_xaxes(side="top"); fig_h.update_yaxes(autorange="reversed")
+            
+            # --- 修正箇所: type='category' を追加 ---
+            fig_h.update_xaxes(side="top", type='category')
+            fig_h.update_yaxes(autorange="reversed", type='category')
+            # ------------------------------------
+            
             fig_h.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_h, use_container_width=False)
     with col_v:
@@ -275,7 +261,12 @@ with st.container():
             grid_v = create_range_grid_visual(v_combos)
             lbl = list("AKQJT98765432")
             fig_v = px.imshow(grid_v, x=lbl, y=lbl, color_continuous_scale=["lightgrey", "red"], zmin=0, zmax=1)
-            fig_v.update_xaxes(side="top"); fig_v.update_yaxes(autorange="reversed")
+            
+            # --- 修正箇所: type='category' を追加 ---
+            fig_v.update_xaxes(side="top", type='category')
+            fig_v.update_yaxes(autorange="reversed", type='category')
+            # ------------------------------------
+            
             fig_v.update_layout(width=200, height=200, margin=dict(l=0,r=0,t=0,b=0), coloraxis_showscale=False)
             st.plotly_chart(fig_v, use_container_width=False)
 
@@ -324,8 +315,8 @@ if hero_range and villain_range:
     st.subheader("3. Dynamic Board Analysis (Next Card)")
     with st.expander("ℹ️ How to read (解説)", expanded=False):
         st.markdown("""
-        * **Weighted Downside Risk:** Sum of equity loss.
-        * **Scare Cards:** >5% equity drop.
+        * **Weighted Downside Risk:** Sum of equity loss across bad cards.
+        * **Scare Cards:** Cards that drop equity by >5%.
         """)
     if len(board_objs) < 5:
         df = analyze_runouts(hero_range, villain_range, board_objs, iterations=sim_iterations)
@@ -364,5 +355,4 @@ if hero_range and villain_range:
             hist.add_trace(go.Histogram(x=ve, name='Villain', marker_color='red', opacity=0.7, xbins=dict(start=0,end=100,size=5)))
             hist.update_layout(barmode='overlay', width=800, height=400, xaxis_title="Equity %")
             st.plotly_chart(hist)
-    else:
-        st.success("River Reached")
+    else: st.success("River Reached")
