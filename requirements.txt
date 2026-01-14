@@ -1,6 +1,5 @@
-Cython
-numpy
+streamlit
+treys
 pandas
 plotly
-streamlit
-eval7
+numpy
