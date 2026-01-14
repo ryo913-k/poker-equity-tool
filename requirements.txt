@@ -1,4 +1,6 @@
-streamlit
-eval7
+Cython
+numpy
 pandas
 plotly
+streamlit
+eval7
